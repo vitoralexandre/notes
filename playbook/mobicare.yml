@@ -1,0 +1,173 @@
+- hosts: ec2
+  tasks:
+  - name: Docker Deps
+    yum:
+      name: 
+        - yum-utils 
+        - device-mapper-persistent-data 
+        - lvm2
+        - epel-release
+
+  - name: Enable IP Forward 
+    command: sysctl -w net.ipv4.ip_forward=1
+
+  - name: Docker Repo
+    command: yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+
+  - name: Install Docker
+    yum: 
+      name:
+        - docker-ce 
+        - docker-ce-cli 
+        - containerd.io
+        - docker-compose
+      disable_gpg_check: yes
+    
+  - name: Install deps
+    yum: 
+      name: 
+        - MySQL-python 
+
+  - name: Install pip 
+    yum: 
+      name: 
+        - python-pip 
+
+  - name: Install Docker-PY 
+    pip: 
+      name:
+        - docker-py
+
+  - name: Start Docker
+    service: 
+      name: docker
+      state: started
+
+  - name: FirewallD Docker Rules
+    firewalld:
+      zone: trusted
+      source: 172.17.0.0/24 
+      permanent: yes
+      state: enabled
+
+  - name: FirewallD HTTP Rules
+    firewalld:
+      zone: public
+      service: http
+      permanent: yes
+      state: enabled
+
+  - name: app
+    copy:
+      src: /srv/app
+      dest: /vhosts/
+
+  - name: nginx
+    copy:
+      src: /srv/nginx
+      dest: /opt/
+
+  - name: .my.cnf
+    copy:
+      src: /srv/.my.cnf
+      dest: /root/.my.cnf
+
+  - name: MySQL Container
+    docker_container:
+      state: started
+      name: db
+      image: mysql:5
+      recreate: yes
+      volumes: 
+        - /root/.my.cnf:/root/.my.cnf
+      exposed_ports:
+        - 3306
+      published_ports: 
+        - 3306:3306
+      restart_policy: unless-stopped 
+      env: 
+        MYSQL_ROOT_PASSWORD: dndXCZd2S4scZq 
+
+  - name: MySQL wait 30s
+    wait_for:
+      host: 127.0.0.1
+      port: 3306
+      delay: 30
+
+  - name: Create notes DB
+    mysql_db:
+      name: notes
+      state: present
+      login_host: 127.0.0.1 
+      login_user: root 
+      login_password: dndXCZd2S4scZq
+
+  - name: Copy notes dump
+    copy:
+      src: /srv/database_schema.sql
+      dest: /tmp
+
+  - name: Create notes-api
+    mysql_user:
+      name: notes-api
+      password: notes-api
+      priv: 'notes.*:ALL,GRANT'
+      host: '%'
+      state: present
+      login_host: 127.0.0.1
+      login_user: root
+      login_password: dndXCZd2S4scZq
+
+  - name: Restore notes dump
+    mysql_db:
+      name: notes
+      state: import
+      target: /tmp/database_schema.sql
+      login_user: root
+      login_password: dndXCZd2S4scZq
+      login_host: 127.0.0.1
+
+  - name: Node Container
+    docker_container:
+      name: app
+      image: node:12
+      state: started
+      recreate: yes
+      exposed_ports:
+        - 8080
+      published_ports: 
+        - 8080:8080
+      volumes:
+        - /vhosts/app:/app
+      restart_policy: unless-stopped 
+      links:
+        - "db:mysql"
+      working_dir: /app
+      env:
+        NODE_ENV: production
+      command: 
+        - bash /app/start.sh 
+
+  - name: Proxy Container
+    docker_container:
+      name: proxy
+      image: nginx:latest
+      state: started
+      recreate: yes
+      working_dir: /etc/nginx
+      exposed_ports:
+        - 80
+        - 443
+      published_ports:
+        - 80:80
+        - 443:443
+      volumes:
+        - /opt/nginx:/etc/nginx:rw
+      restart_policy: unless-stopped 
+
+  handlers: 
+    - name: Docker Boot
+      systemd:
+        state: started
+        name: docker
+
