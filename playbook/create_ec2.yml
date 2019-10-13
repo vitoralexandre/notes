@@ -1,0 +1,10 @@
+- ec2:
+  key_name: key_mobicare
+  instance_type: t3a.small
+  image: ami-25bd2743 (CentOS 7 com updates)
+  wait: yes
+  group: nodejs (Security Group configurado para liberar apenas a porta 8080 para o mundo, a porta 22 será liberada apenas para a rede adminsitrativa)
+  count: 1
+  vpc_subnet_id: subnet-XXXXXXXX (IP privado)
+  assign_public_ip: no
+
