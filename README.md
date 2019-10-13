@@ -50,6 +50,9 @@ ______
 
 ## Como criar
 
+**Os arquivos da pasta "srv" deste projeto devem ser enviados para a pasta "/srv" do Ansible master, caso contrário, o playbook retorná erros.**
+**Edite o IP da rede do Docker, caso necessário, no arquivo mobicare.yml, alterando o IP 172.17.0.1 para o IP correto.**
+ 
 A ação é simples, após alterar o playbook com a chave, basta: 
 ansbile-playbook create_ec2.yml 
 
